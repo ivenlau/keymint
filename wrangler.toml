@@ -1,0 +1,26 @@
+name = "create-key"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# ============================================================
+# GitHub 集成部署：把本仓库推到 GitHub 后，
+# 在 Cloudflare Dashboard → Workers & Pages → Create → Import repository
+# 即可自动识别本文件部署；每次 push 自动发布。
+#
+# 配置在 Dashboard「Settings → Variables and Secrets」设置（改动即时生效，
+# 无需重新部署；留空则使用 src/config.js 中的默认值）：
+#
+#   Secrets（敏感，建议加密存储）：
+#     SIGNING_KEY_PKCS8_B64   签名私钥（PKCS#8 DER 的 Base64，gen-keys.sh 产物）
+#     CERT_DER_B64            X.509 证书（DER 的 Base64）
+#     PUBLIC_KEY_SPKI_B64     证书公钥（SPKI DER 的 Base64）
+#     ADMIN_TOKEN             访问令牌（单个 token 或 token 文件地址）
+#
+#   Variables（普通配置，覆盖 src/config.js 默认值）：
+#     PRODUCT_CODES / METADATA / PAYLOAD_HASH / GRACE_PERIOD_DAYS
+#     AUTO_PROLONGATED / CHECK_CONCURRENT_USE / ASSIGNEE_EMAIL
+#     LICENSE_RESTRICTION / SIGN_HASH
+#     PAGE_TITLE / PAGE_TITLE_ACCENT / COMMAND_WINDOWS / COMMAND_UNIX
+#     MAX_NAME_LENGTH / LICENSE_ID_LENGTH
+#     CORS_ORIGIN（默认 *）
+# ============================================================

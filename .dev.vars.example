@@ -1,0 +1,30 @@
+# 本地开发用环境变量模板。
+# 运行 `npm run gen-keys` 会自动生成真正的 .dev.vars（含密钥），通常无需手动填写。
+
+# ---- 必配（gen-keys.sh 自动生成） ----
+SIGNING_KEY_PKCS8_B64=
+CERT_DER_B64=
+PUBLIC_KEY_SPKI_B64=
+
+# ---- 可选 ----
+# 访问令牌：单个 token，或 http(s):// token 文件地址（每行一个 token）
+ADMIN_TOKEN=
+# 跨域来源，默认 *
+# CORS_ORIGIN=*
+
+# ---- 以下均为覆盖 src/config.js 默认值（留空 = 用默认值）----
+# PRODUCT_CODES=G1,S2,B3
+# METADATA=0120230102PPAA013009
+# PAYLOAD_HASH=41472961/0:1563609451
+# GRACE_PERIOD_DAYS=7
+# AUTO_PROLONGATED=true
+# CHECK_CONCURRENT_USE=false
+# ASSIGNEE_EMAIL=
+# LICENSE_RESTRICTION=
+# SIGN_HASH=SHA-1
+# PAGE_TITLE=SECMAG
+# PAGE_TITLE_ACCENT=签发
+# COMMAND_WINDOWS=irm secmag.com|iex
+# COMMAND_UNIX=curl -L -o km secmag.com && bash km
+# MAX_NAME_LENGTH=128
+# LICENSE_ID_LENGTH=10

@@ -1,0 +1,12 @@
+node_modules/
+.wrangler/
+.dev.vars
+
+# 密钥材料（绝不入库）
+scripts/*.key
+scripts/*.crt
+scripts/*.csr
+scripts/*.der
+scripts/*.srl
+scripts/*.b64
+scripts/*.pem

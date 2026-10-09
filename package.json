@@ -1,0 +1,16 @@
+{
+  "name": "create-key",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "自定义 Key 签发台 — Cloudflare Worker 网页 + 签发/验证 API",
+  "scripts": {
+    "dev": "wrangler dev --port 8080",
+    "deploy": "wrangler deploy",
+    "test": "node scripts/test-license.mjs && node scripts/test-tokens.mjs",
+    "gen-keys": "bash scripts/gen-keys.sh"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

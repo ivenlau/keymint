@@ -1,4 +1,4 @@
-name = "create-key"
+name = "keymint"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
 

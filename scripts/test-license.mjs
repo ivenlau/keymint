@@ -154,13 +154,15 @@ assert(!!(await certSignatureInfo(fakeCertB64)).error, '证书签名详情：非
 if (existsSync(realDerPath)) {
   const info = await certSignatureInfo(readFileSync(realDerPath, 'utf8').trim());
   assert(!info.error, '证书签名详情：真实证书解析成功');
-  // RSA-4096 → 签名 512 B → hex 1024 字符；编码块与签名等长（= 模长）
-  assert(info.signatureHex.length === 1024, '证书签名详情：签名值为 512 字节（RSA-4096）');
-  assert(info.encodedHex.length === info.signatureHex.length, '证书签名详情：编码块长度 = 模长');
-  assert(info.encodedHex.startsWith('0001ff'), '证书签名详情：EM 前缀 00 01 FF（PKCS#1 v1.5）');
+  assert(/^\d+$/.test(info.signature) && /^\d+$/.test(info.encoded), '证书签名详情：输出为十进制大整数');
+  // 转回 hex（左补零到模长）后校验结构：RSA-4096 → 512 B → hex 1024 字符
+  const sigHex = BigInt(info.signature).toString(16).padStart(1024, '0');
+  const emHex = BigInt(info.encoded).toString(16).padStart(1024, '0');
+  assert(sigHex.length === 1024 && emHex.length === 1024, '证书签名详情：签名 / 编码块均为 512 字节（模长）');
+  assert(emHex.startsWith('0001ff'), '证书签名详情：EM 前缀 00 01 FF（PKCS#1 v1.5）');
   // DigestInfo(SHA-256) 固定位于 digest（末 32 B）之前，其前一字节为 0x00 分隔符
-  assert(info.encodedHex.slice(-102, -64) === '3031300d060960864801650304020105000420', '证书签名详情：EM 含 DigestInfo(SHA-256)');
-  assert(info.encodedHex.slice(-104, -102) === '00', '证书签名详情：0x00 分隔符紧邻 DigestInfo');
+  assert(emHex.slice(-102, -64) === '3031300d060960864801650304020105000420', '证书签名详情：EM 含 DigestInfo(SHA-256)');
+  assert(emHex.slice(-104, -102) === '00', '证书签名详情：0x00 分隔符紧邻 DigestInfo');
 }
 
 console.log('\n全部测试通过');

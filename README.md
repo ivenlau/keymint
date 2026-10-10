@@ -169,12 +169,12 @@ const authCode = await response.text();   // 四段式 key
 
 ### `GET /cert/signature` — 证书签名详情
 
-返回两个 hex 值（页面页脚「/cert 签名」弹窗的数据源）：
+返回两个十进制大整数（字符串，页面页脚「/cert 签名」弹窗的数据源）：
 
 ```json
 {
-  "signature": "…",  // 签名：证书 CA 签名值（signatureValue，二进制 hex 编码）
-  "encoded": "…"     // 密文：PKCS#1(SHA256(TBS))，CA 公钥还原签名所得的 PKCS#1 编码块
+  "signature": "46113912236595…",  // 签名：证书 CA 签名值（signatureValue）
+  "encoded": "31872219281407…"     // 密文：PKCS#1(SHA256(TBS))，CA 公钥还原签名所得的 PKCS#1 编码块
 }
 ```
 

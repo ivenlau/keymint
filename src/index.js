@@ -6,7 +6,7 @@
  *   POST /getKey  签发 key（create_key.md 契约：JSON 入参，纯文本返回）
  *   POST /verify  校验 key（JSON 或纯文本入参，JSON 返回）
  *   GET  /cert    返回签发证书 PEM
- *   GET  /cert/signature  证书签名详情：CA 签名值 + PKCS#1(SHA256(TBS))（hex）
+ *   GET  /cert/signature  证书签名详情：CA 签名值 + PKCS#1(SHA256(TBS))（十进制）
  *
  * Secrets（wrangler secret put 或本地 .dev.vars）：
  *   SIGNING_KEY_PKCS8_B64   签名私钥（PKCS#8 DER 的 Base64）
@@ -166,16 +166,8 @@ async function handleCertSignature(env) {
   if (!env.CERT_DER_B64) return json({ error: '服务端未配置 CERT_DER_B64' }, 500, env);
   const info = await certSignatureInfo(env.CERT_DER_B64);
   if (info.error) return json({ error: info.error }, 500, env);
-  return json(
-    {
-      // 签名：证书 CA 签名值（signatureValue，二进制 hex 编码）
-      signature: info.signatureHex,
-      // 密文：PKCS#1(SHA256(TBS))，CA 公钥还原签名所得的 PKCS#1 编码块
-      encoded: info.encodedHex,
-    },
-    200,
-    env,
-  );
+  // 签名：证书 CA 签名值；密文：PKCS#1(SHA256(TBS))。均为十进制大整数字符串
+  return json(info, 200, env);
 }
 
 /* 浏览器标签页图标：报头印章的 favicon 版（描边加粗，16px 下依然清晰） */
@@ -298,20 +290,20 @@ body {
 .wrap { max-width: 1180px; margin: 0 auto; padding: 52px 28px 72px; }
 
 /* ---------- 滚动条（适配页面风格） ---------- */
-.keybox, .multi-panel, .cmdline-text {
+.keybox, .multi-panel, .cmdline-text, .modal-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(240, 231, 212, 0.25) transparent;
 }
-.keybox::-webkit-scrollbar, .multi-panel::-webkit-scrollbar, .cmdline-text::-webkit-scrollbar {
+.keybox::-webkit-scrollbar, .multi-panel::-webkit-scrollbar, .cmdline-text::-webkit-scrollbar, .modal-scroll::-webkit-scrollbar {
   width: 10px; height: 8px;
 }
-.keybox::-webkit-scrollbar-track, .multi-panel::-webkit-scrollbar-track, .cmdline-text::-webkit-scrollbar-track {
+.keybox::-webkit-scrollbar-track, .multi-panel::-webkit-scrollbar-track, .cmdline-text::-webkit-scrollbar-track, .modal-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
-.keybox::-webkit-scrollbar-thumb, .multi-panel::-webkit-scrollbar-thumb, .cmdline-text::-webkit-scrollbar-thumb {
+.keybox::-webkit-scrollbar-thumb, .multi-panel::-webkit-scrollbar-thumb, .cmdline-text::-webkit-scrollbar-thumb, .modal-scroll::-webkit-scrollbar-thumb {
   background: rgba(240, 231, 212, 0.22); border: 2px solid transparent; background-clip: padding-box;
 }
-.keybox::-webkit-scrollbar-thumb:hover, .multi-panel::-webkit-scrollbar-thumb:hover, .cmdline-text::-webkit-scrollbar-thumb:hover {
+.keybox::-webkit-scrollbar-thumb:hover, .multi-panel::-webkit-scrollbar-thumb:hover, .cmdline-text::-webkit-scrollbar-thumb:hover, .modal-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(227, 164, 75, 0.55); background-clip: padding-box;
 }
 
@@ -546,13 +538,15 @@ input[type="date"] { color-scheme: dark; }
   background: rgba(11, 9, 6, 0.8); backdrop-filter: blur(5px);
 }
 .modal-panel {
-  position: relative; width: min(840px, 100%); max-height: min(84vh, 760px);
-  overflow-y: auto; padding: 28px 30px 24px;
+  position: relative; width: min(840px, 100%); max-height: min(88vh, 800px);
+  display: flex; flex-direction: column; padding: 28px 30px 24px;
   background: linear-gradient(180deg, rgba(25, 20, 16, 0.97), rgba(18, 14, 10, 0.97));
   border: 1px solid var(--line);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
   animation: rise 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
+/* 滚动只发生在这一层：面板本体不设 overflow，避免角标出角 1px 触发面板滚动条 */
+.modal-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .modal-panel::before, .modal-panel::after {
   content: ""; position: absolute; width: 12px; height: 12px; pointer-events: none;
 }
@@ -571,7 +565,7 @@ input[type="date"] { color-scheme: dark; }
 .sig-block .field-top { flex-wrap: wrap; row-gap: 8px; }
 .sig-block .opt { letter-spacing: 0.08em; }
 .sig-block .btn-ghost { margin-left: 10px; padding: 6px 10px; font-size: 10px; flex: none; }
-.sig-box { height: 128px; margin-top: 2px; font-size: 10px; line-height: 1.8; }
+.sig-box { height: auto; margin-top: 2px; font-size: 10px; line-height: 1.7; overflow: hidden; }
 .sig-box.empty { color: var(--faint); border-left-color: var(--line-2); }
 
 /* ---------- 页脚 ---------- */
@@ -741,11 +735,12 @@ footer a:hover { color: var(--amber); }
     </div>
     <p class="modal-sub">来源：seg3 证书 · RSA 公钥还原签名值即得密文（PKCS#1 编码块）</p>
 
+    <div class="modal-scroll">
     <div class="field sig-block">
       <div class="field-top">
         <span class="num">01</span>
         <span class="field-name">签名 / SIGNATURE</span>
-        <span class="opt">证书CA签名值 · 二进制HEX</span>
+        <span class="opt">证书CA签名值 · 十进制</span>
         <button type="button" class="btn-ghost sig-copy" data-target="sig-value">复制</button>
       </div>
       <pre class="keybox sig-box empty" id="sig-value">加载中…</pre>
@@ -762,6 +757,7 @@ footer a:hover { color: var(--amber); }
     </div>
 
     <p class="status" id="cert-status" role="status"></p>
+    </div>
   </div>
 </div>
 

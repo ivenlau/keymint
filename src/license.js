@@ -246,13 +246,13 @@ const SHA256_DIGEST_INFO = new Uint8Array([
 ]);
 
 /**
- * 证书签名详情（页面「/cert 签名」弹窗的数据源）：
- * - signatureHex：证书 signatureValue（CA 对 TBS 的 RSA 签名值），hex 编码
- * - encodedHex：PKCS#1(SHA256(TBS))，即 EMSA-PKCS1-v1_5 编码块，hex 编码。
+ * 证书签名详情（页面「/cert 签名」弹窗的数据源），均以十进制大整数字符串表示：
+ * - signature：证书 signatureValue（CA 对 TBS 的 RSA 签名值）
+ * - encoded：PKCS#1(SHA256(TBS))，即 EMSA-PKCS1-v1_5 编码块。
  *   EM = 0x00 0x01 PS 0x00 DigestInfo(SHA-256) SHA256(TBS)，总长 = 模长；
  *   用 CA 公钥对签名做还原运算即得此块。
  * @param {string} certDerB64  X.509 证书（DER 的 Base64）
- * @returns {Promise<{signatureHex: string, encodedHex: string} | {error: string}>}
+ * @returns {Promise<{signature: string, encoded: string} | {error: string}>}
  */
 export async function certSignatureInfo(certDerB64) {
   let der;
@@ -285,7 +285,10 @@ export async function certSignatureInfo(certDerB64) {
   em.set(SHA256_DIGEST_INFO, 3 + psLen);
   em.set(digest, 3 + psLen + SHA256_DIGEST_INFO.length);
 
-  return { signatureHex: toHex(signature), encodedHex: toHex(em) };
+  return {
+    signature: BigInt('0x' + toHex(signature)).toString(),
+    encoded: BigInt('0x' + toHex(em)).toString(),
+  };
 }
 
 /* ---------------- PEM 辅助 ---------------- */

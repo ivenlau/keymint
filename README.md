@@ -167,6 +167,17 @@ const authCode = await response.text();   // 四段式 key
 
 返回 seg3 证书的 PEM，供你的产品侧内置/信任。
 
+### `GET /cert/signature` — 证书签名详情
+
+返回两个 hex 值（页面页脚「/cert 签名」弹窗的数据源）：
+
+```json
+{
+  "signature": "…",  // 签名：证书 CA 签名值（signatureValue，二进制 hex 编码）
+  "encoded": "…"     // 密文：PKCS#1(SHA256(TBS))，CA 公钥还原签名所得的 PKCS#1 编码块
+}
+```
+
 ## 产品侧验签示意
 
 ```js

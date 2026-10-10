@@ -6,6 +6,7 @@
  *   POST /getKey  签发 key（create_key.md 契约：JSON 入参，纯文本返回）
  *   POST /verify  校验 key（JSON 或纯文本入参，JSON 返回）
  *   GET  /cert    返回签发证书 PEM
+ *   GET  /cert/signature  证书签名详情：CA 签名值 + PKCS#1(SHA256(TBS))（hex）
  *
  * Secrets（wrangler secret put 或本地 .dev.vars）：
  *   SIGNING_KEY_PKCS8_B64   签名私钥（PKCS#8 DER 的 Base64）
@@ -18,6 +19,7 @@ import {
   generateLicenseKey,
   verifyLicenseKey,
   resolveProducts,
+  certSignatureInfo,
   derToPem,
 } from './license.js';
 import { loadAdminTokens } from './tokens.js';
@@ -160,6 +162,22 @@ function handleCert(env) {
   return text(derToPem(env.CERT_DER_B64, 'CERTIFICATE'), 200, env);
 }
 
+async function handleCertSignature(env) {
+  if (!env.CERT_DER_B64) return json({ error: '服务端未配置 CERT_DER_B64' }, 500, env);
+  const info = await certSignatureInfo(env.CERT_DER_B64);
+  if (info.error) return json({ error: info.error }, 500, env);
+  return json(
+    {
+      // 签名：证书 CA 签名值（signatureValue，二进制 hex 编码）
+      signature: info.signatureHex,
+      // 密文：PKCS#1(SHA256(TBS))，CA 公钥还原签名所得的 PKCS#1 编码块
+      encoded: info.encodedHex,
+    },
+    200,
+    env,
+  );
+}
+
 /* 浏览器标签页图标：报头印章的 favicon 版（描边加粗，16px 下依然清晰） */
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
   <rect width="120" height="120" rx="24" fill="#100d0a"/>
@@ -221,6 +239,9 @@ export default {
       if (url.pathname === '/getKey' && request.method === 'POST') return handleGetKey(request, env);
       if (url.pathname === '/verify' && request.method === 'POST') return handleVerify(request, env);
       if (url.pathname === '/cert' && request.method === 'GET') return handleCert(env);
+      if (url.pathname === '/cert/signature' && request.method === 'GET') {
+        return handleCertSignature(env);
+      }
       return json({ error: 'not found' }, 404, env);
     } catch (err) {
       return json({ error: String((err && err.message) || err) }, 500, env);
@@ -514,6 +535,45 @@ input[type="date"] { color-scheme: dark; }
 .verify-row { display: flex; gap: 10px; }
 .verify-row input { flex: 1; padding: 11px 12px; font-size: 12px; }
 
+/* ---------- /cert 签名弹窗 ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 22px;
+}
+.modal[hidden] { display: none; }
+.modal-mask {
+  position: absolute; inset: 0;
+  background: rgba(11, 9, 6, 0.8); backdrop-filter: blur(5px);
+}
+.modal-panel {
+  position: relative; width: min(840px, 100%); max-height: min(84vh, 760px);
+  overflow-y: auto; padding: 28px 30px 24px;
+  background: linear-gradient(180deg, rgba(25, 20, 16, 0.97), rgba(18, 14, 10, 0.97));
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+  animation: rise 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.modal-panel::before, .modal-panel::after {
+  content: ""; position: absolute; width: 12px; height: 12px; pointer-events: none;
+}
+.modal-panel::before { top: -1px; left: -1px; border-top: 1px solid var(--amber); border-left: 1px solid var(--amber); }
+.modal-panel::after { bottom: -1px; right: -1px; border-bottom: 1px solid var(--amber); border-right: 1px solid var(--amber); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.modal-head .idx { display: block; margin-bottom: 8px; }
+.modal-head h2 { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: 0.02em; }
+.modal-close {
+  background: transparent; border: 1px solid var(--line-2); color: var(--muted);
+  width: 32px; height: 32px; flex: none; font: 400 16px/1 var(--mono);
+  cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
+.modal-close:hover { color: var(--red); border-color: var(--red); }
+.modal-sub { margin-top: 8px; font-size: 11px; color: var(--faint); letter-spacing: 0.06em; }
+.sig-block .field-top { flex-wrap: wrap; row-gap: 8px; }
+.sig-block .opt { letter-spacing: 0.08em; }
+.sig-block .btn-ghost { margin-left: 10px; padding: 6px 10px; font-size: 10px; flex: none; }
+.sig-box { height: 128px; margin-top: 2px; font-size: 10px; line-height: 1.8; }
+.sig-box.empty { color: var(--faint); border-left-color: var(--line-2); }
+
 /* ---------- 页脚 ---------- */
 footer {
   border-top: 1px solid var(--line); margin-top: 52px; padding-top: 22px;
@@ -530,6 +590,7 @@ footer a:hover { color: var(--amber); }
   .reveal { animation: none; opacity: 1; transform: none; }
   .seal .ring { animation: none; }
   .btn-mint::after { display: none; }
+  .modal-panel { animation: none; }
 }
 @media (max-width: 920px) {
   .layout { grid-template-columns: 1fr; }
@@ -662,10 +723,46 @@ footer a:hover { color: var(--amber); }
   </main>
 
   <footer>
-    <span>KEY MINT · <a href="/cert" target="_blank" rel="noopener">/cert 签发证书</a> · <a href="/verify" target="_blank" rel="noopener">/verify 校验接口</a></span>
+    <span>KEY MINT · <a href="/cert/signature" id="cert-sig-link">/cert 签名</a></span>
     <span id="foot-note">步骤：命令安装 · 签发KEY · 复制KEY · 使用KEY</span>
   </footer>
 
+</div>
+
+<div class="modal" id="cert-modal" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="cert-modal-title">
+    <div class="modal-head">
+      <div>
+        <span class="idx">CERT / 05</span>
+        <h2 id="cert-modal-title">/cert 签名</h2>
+      </div>
+      <button type="button" class="modal-close" data-close aria-label="关闭">×</button>
+    </div>
+    <p class="modal-sub">来源：seg3 证书 · RSA 公钥还原签名值即得密文（PKCS#1 编码块）</p>
+
+    <div class="field sig-block">
+      <div class="field-top">
+        <span class="num">01</span>
+        <span class="field-name">签名 / SIGNATURE</span>
+        <span class="opt">证书CA签名值 · 二进制HEX</span>
+        <button type="button" class="btn-ghost sig-copy" data-target="sig-value">复制</button>
+      </div>
+      <pre class="keybox sig-box empty" id="sig-value">加载中…</pre>
+    </div>
+
+    <div class="field sig-block">
+      <div class="field-top">
+        <span class="num">02</span>
+        <span class="field-name">密文 / CIPHERTEXT</span>
+        <span class="opt">PKCS#1(SHA256(TBS))</span>
+        <button type="button" class="btn-ghost sig-copy" data-target="enc-value">复制</button>
+      </div>
+      <pre class="keybox sig-box empty" id="enc-value">加载中…</pre>
+    </div>
+
+    <p class="status" id="cert-status" role="status"></p>
+  </div>
 </div>
 
 <script>
@@ -954,6 +1051,71 @@ footer a:hover { color: var(--amber); }
       .catch(function (err) { setStatus(verifyStatus, "校验失败：" + err.message, "err"); })
       .then(function () { verifyBtn.disabled = false; });
   });
+
+  /* ---- /cert 签名弹窗 ---- */
+  var certModal = document.getElementById("cert-modal");
+  var certStatus = document.getElementById("cert-status");
+  var certSigBox = document.getElementById("sig-value");
+  var certEncBox = document.getElementById("enc-value");
+  var certLoaded = false;
+
+  function setCertBoxes(sig, enc, failed) {
+    certSigBox.textContent = sig;
+    certEncBox.textContent = enc;
+    certSigBox.classList.toggle("empty", !!failed);
+    certEncBox.classList.toggle("empty", !!failed);
+  }
+
+  function loadCertSignature() {
+    setStatus(certStatus, "加载中…", "");
+    fetch("/cert/signature")
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (r) {
+        if (!r.ok || r.data.error) throw new Error(r.data.error || "HTTP " + r.status);
+        setCertBoxes(r.data.signature, r.data.encoded, false);
+        certLoaded = true;
+        setStatus(certStatus, "已从 /cert 证书提取 · RSA-4096 · PKCS#1 v1.5 / SHA-256", "ok");
+      })
+      .catch(function (err) {
+        setCertBoxes("加载失败", "加载失败", true);
+        setStatus(certStatus, "加载失败：" + err.message, "err");
+      });
+  }
+
+  function openCertModal() {
+    certModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    if (!certLoaded) loadCertSignature();
+  }
+  function closeCertModal() {
+    certModal.hidden = true;
+    document.body.style.overflow = "";
+  }
+
+  document.getElementById("cert-sig-link").addEventListener("click", function (e) {
+    e.preventDefault();
+    openCertModal();
+  });
+  certModal.addEventListener("click", function (e) {
+    if (e.target && e.target.getAttribute && e.target.getAttribute("data-close") !== null) {
+      closeCertModal();
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !certModal.hidden) closeCertModal();
+  });
+
+  var sigCopyBtns = document.querySelectorAll(".sig-copy");
+  for (var j = 0; j < sigCopyBtns.length; j++) {
+    (function (btn) {
+      btn.addEventListener("click", function () {
+        var box = document.getElementById(btn.getAttribute("data-target"));
+        if (box && !box.classList.contains("empty")) copyText(box.textContent, btn, "复制");
+      });
+    })(sigCopyBtns[j]);
+  }
 })();
 </script>
 </body>

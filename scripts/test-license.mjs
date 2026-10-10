@@ -5,7 +5,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateLicenseKey, verifyLicenseKey, resolveProducts, splitKey, randomLicenseId } from '../src/license.js';
+import { generateLicenseKey, verifyLicenseKey, resolveProducts, splitKey, randomLicenseId, certSignatureInfo } from '../src/license.js';
 import { CONFIG, resolveConfig } from '../src/config.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -146,5 +146,21 @@ assert(!bad2.valid, 'licenseId 与 payload 不一致时被拒绝');
 // 分段数错误应被拒绝
 const bad3 = await verifyLicenseKey(parts.slice(0, 3).join('-'), toB64(spki));
 assert(!bad3.valid, '分段数不足 4 时被拒绝');
+
+// 证书签名详情：非法 DER 返回 error 而非抛出
+assert(!!(await certSignatureInfo(fakeCertB64)).error, '证书签名详情：非法 DER 返回 error');
+
+// —— 真实证书产物：签名值与 PKCS#1 编码块结构校验 ——
+if (existsSync(realDerPath)) {
+  const info = await certSignatureInfo(readFileSync(realDerPath, 'utf8').trim());
+  assert(!info.error, '证书签名详情：真实证书解析成功');
+  // RSA-4096 → 签名 512 B → hex 1024 字符；编码块与签名等长（= 模长）
+  assert(info.signatureHex.length === 1024, '证书签名详情：签名值为 512 字节（RSA-4096）');
+  assert(info.encodedHex.length === info.signatureHex.length, '证书签名详情：编码块长度 = 模长');
+  assert(info.encodedHex.startsWith('0001ff'), '证书签名详情：EM 前缀 00 01 FF（PKCS#1 v1.5）');
+  // DigestInfo(SHA-256) 固定位于 digest（末 32 B）之前，其前一字节为 0x00 分隔符
+  assert(info.encodedHex.slice(-102, -64) === '3031300d060960864801650304020105000420', '证书签名详情：EM 含 DigestInfo(SHA-256)');
+  assert(info.encodedHex.slice(-104, -102) === '00', '证书签名详情：0x00 分隔符紧邻 DigestInfo');
+}
 
 console.log('\n全部测试通过');

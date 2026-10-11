@@ -512,10 +512,10 @@ input[type="date"] {
 .mode-badge.custom .mode-dot { background: var(--amber); box-shadow: 0 0 6px rgba(227, 164, 75, 0.7); }
 .mode-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
 .upload-note { margin-top: 8px; font-size: 9px; color: var(--faint); letter-spacing: 0.05em; line-height: 1.6; }
-.mode-switch { display: flex; border: 1px solid var(--line-2); }
+.mode-switch { display: flex; border: 1px solid var(--line-2); width: 100%; }
 .mode-btn {
-  background: transparent; border: 0; color: var(--muted);
-  font: 500 10px/1 var(--mono); letter-spacing: 0.12em; padding: 7px 12px;
+  flex: 1; background: transparent; border: 0; color: var(--muted);
+  font: 500 10px/1 var(--mono); letter-spacing: 0.12em; padding: 9px 8px;
   cursor: pointer; transition: color 0.15s, background 0.15s;
 }
 .mode-btn + .mode-btn { border-left: 1px solid var(--line-2); }

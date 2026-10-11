@@ -291,6 +291,121 @@ export async function certSignatureInfo(certDerB64) {
   };
 }
 
+/* ---------------- 自定义证书签发材料 ---------------- */
+
+/** 去除 PEM 包装与空白，返回纯 Base64（兼容 PEM / DER Base64 两种输入） */
+export function normalizePemB64(s) {
+  return String(s || '').replace(/-----[^-]*-----/g, '').replace(/\s+/g, '');
+}
+
+/**
+ * 从证书中提取 subjectPublicKeyInfo（SPKI，DER 的 Base64）。
+ * 遍历 tbsCertificate 子元素，取第一个能作为 RSA SPKI 导入的 SEQUENCE。
+ * @param {string} certB64  证书（PEM 或 DER 的 Base64）
+ * @returns {Promise<string|null>} 失败返回 null
+ */
+export async function extractCertSpkiB64(certB64) {
+  let der;
+  try {
+    der = b64ToBytes(normalizePemB64(certB64));
+  } catch {
+    return null;
+  }
+  const cert = derReadTlv(der, 0);
+  if (cert.tag !== 0x30) return null;
+  const tbs = derReadTlv(der, cert.contentStart);
+  for (let pos = tbs.contentStart; pos < tbs.contentEnd;) {
+    const tlv = derReadTlv(der, pos);
+    pos = tlv.contentEnd;
+    if (tlv.tag !== 0x30) continue;
+    try {
+      // 注意：SPKI 需要完整 TLV（含 SEQUENCE 头），故从 tlv.start 切片；
+      // 且用 slice（拷贝）而非 subarray：部分运行时对非零偏移视图的 importKey 会报 DataError
+      await crypto.subtle.importKey(
+        'spki',
+        der.slice(tlv.start, tlv.contentEnd),
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
+        true,
+        ['verify'],
+      );
+      return bytesToB64(der.slice(tlv.start, tlv.contentEnd));
+    } catch {
+      /* 非 SPKI 元素，继续 */
+    }
+  }
+  return null;
+}
+
+/**
+ * 归一化签发材料输入，兼容三种形态：
+ * PEM 文本 / base64(DER) / base64(PEM 文本)（浏览器把 PEM 文件整文件 base64 的情形）
+ * @param {string} raw
+ * @returns {string} 纯 base64(DER)；失败返回空串
+ */
+export function normalizeMaterialB64(raw) {
+  const s = normalizePemB64(String(raw || ''));
+  if (!s) return '';
+  let bytes;
+  try {
+    bytes = b64ToBytes(s);
+  } catch {
+    return '';
+  }
+  const text = decoder.decode(bytes);
+  if (text.startsWith('-----')) return normalizePemB64(text);
+  return s;
+}
+
+/**
+ * 校验自定义签发材料：证书可解析，且证书公钥与私钥配对。
+ * 仅做格式与配对校验；材料由调用方保证当次请求内使用、不存储。
+ * @param {string} certRawB64  证书（PEM / DER 的 Base64 / 整文件 Base64）
+ * @param {string} keyRawB64   私钥（PKCS#8，PEM / DER 的 Base64 / 整文件 Base64）
+ * @returns {Promise<{ok: true, certB64: string, keyB64: string} | {error: string}>}
+ */
+export async function validateIssuanceMaterial(certRawB64, keyRawB64) {
+  const certB64 = normalizeMaterialB64(certRawB64);
+  const keyB64 = normalizeMaterialB64(keyRawB64);
+  if (!certB64) return { error: '证书解析失败：需要 X.509 证书（PEM 或 DER）' };
+  if (!keyB64) return { error: '私钥解析失败：需要 PKCS#8 格式（PEM 或 DER）' };
+
+  const spkiB64 = await extractCertSpkiB64(certB64);
+  if (!spkiB64) return { error: '证书解析失败：需要 X.509 证书（PEM 或 DER）' };
+
+  let keyJwk;
+  try {
+    const priv = await crypto.subtle.importKey(
+      'pkcs8',
+      b64ToBytes(keyB64),
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      true,
+      ['sign'],
+    );
+    keyJwk = await crypto.subtle.exportKey('jwk', priv);
+  } catch {
+    return { error: '私钥解析失败：需要 PKCS#8 格式（PEM 或 DER）' };
+  }
+
+  let certJwk;
+  try {
+    const pub = await crypto.subtle.importKey(
+      'spki',
+      b64ToBytes(spkiB64),
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      true,
+      ['verify'],
+    );
+    certJwk = await crypto.subtle.exportKey('jwk', pub);
+  } catch {
+    return { error: '证书内公钥导入失败' };
+  }
+
+  if (keyJwk.n !== certJwk.n || keyJwk.e !== certJwk.e) {
+    return { error: '证书与私钥不配对：证书公钥与所上传私钥不一致' };
+  }
+  return { ok: true, certB64, keyB64 };
+}
+
 /* ---------------- PEM 辅助 ---------------- */
 
 export function derToPem(derB64, label) {

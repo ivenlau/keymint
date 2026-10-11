@@ -22,6 +22,7 @@ import {
   verifyLicenseKey,
   resolveProducts,
   certSignatureInfo,
+  validateIssuanceMaterial,
   derToPem,
 } from './license.js';
 import { loadAdminTokens } from './tokens.js';
@@ -121,20 +122,36 @@ async function handleGetKey(request, env) {
   const resolved = resolveProducts(body, cfg);
   if (resolved.error) return json({ error: resolved.error }, 400, env);
 
-  requireKeys(env);
+  // 签发模式：自定义证书（上传证书+私钥，当次有效）或服务器预设
+  const uploadCert = String(body.uploadCert || '').trim();
+  const uploadKey = String(body.uploadKey || '').trim();
+  const customMode = Boolean(uploadCert || uploadKey);
+  if (customMode && (!uploadCert || !uploadKey)) {
+    return json({ error: '自定义证书模式需同时上传证书与私钥' }, 400, env);
+  }
+  if (customMode && !cfg.uploadCertMode) {
+    return json({ error: '自定义证书模式未开启（服务端 UPLOAD_CERT_MODE）' }, 403, env);
+  }
+
+  let keys;
+  if (customMode) {
+    const material = await validateIssuanceMaterial(uploadCert, uploadKey);
+    if (material.error) return json({ error: material.error }, 400, env);
+    keys = { signingKeyPkcs8B64: material.keyB64, certDerB64: material.certB64 };
+  } else {
+    requireKeys(env);
+    keys = { signingKeyPkcs8B64: env.SIGNING_KEY_PKCS8_B64, certDerB64: env.CERT_DER_B64 };
+  }
 
   const key = await generateLicenseKey(
     { licenseeName, assigneeName, expiryDate, products: resolved.products },
-    {
-      signingKeyPkcs8B64: env.SIGNING_KEY_PKCS8_B64,
-      certDerB64: env.CERT_DER_B64,
-    },
+    keys,
     cfg,
   );
 
   // create_key.md 契约：const authCode = await response.text()。
-  // 证书签名详情（十进制）随响应头返回，页面「查看签名」弹窗使用，随签发一同受 ADMIN_TOKEN 保护
-  const sig = await certSignatureInfo(env.CERT_DER_B64);
+  // 证书签名详情（十进制）随响应头返回，按实际使用的证书计算，随签发一同受 ADMIN_TOKEN 保护
+  const sig = await certSignatureInfo(keys.certDerB64);
   const extra = sig.error
     ? {}
     : { 'X-Cert-Signature': sig.signature, 'X-Cert-Encoded': sig.encoded };
@@ -203,6 +220,7 @@ function handlePage(env) {
     productCodes: cfg.productCodes,
     commandWindows: cfg.commandWindows,
     commandUnix: cfg.commandUnix,
+    uploadCertMode: cfg.uploadCertMode,
   };
   const html = HTML_PAGE
     .replace(/__UI_TITLE__/g, escapeHtml(cfg.pageTitle))
@@ -392,9 +410,9 @@ h1 em { font-style: normal; color: var(--amber); }
 .idx { color: var(--amber); font-size: 10px; letter-spacing: 0.3em; }
 
 /* ---------- 表单 ---------- */
-.form-panel { display: flex; flex-direction: column; }
+.form-panel { display: flex; flex-direction: column; min-height: min-content; } /* 内容超高时撑开网格滚动，而非溢出面板压住页脚 */
 .form-panel form { display: flex; flex-direction: column; flex: 1; }
-.field { display: block; margin-top: clamp(10px, 2vh, 24px); }
+.field { display: block; margin-top: clamp(8px, 1.9vh, 24px); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(12px, 1.4vw, 20px); }
 .field-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: clamp(6px, 1vh, 9px); }
 .num { color: var(--amber); font-size: 11px; letter-spacing: 0.15em; }
@@ -480,7 +498,21 @@ input[type="date"] {
 .multi-add input { flex: 1; width: auto; padding: 8px 10px; font-size: 12px; }
 .multi-add .btn-ghost { padding: 8px 12px; letter-spacing: 0.1em; flex: none; }
 
-.form-foot { margin-top: auto; padding-top: clamp(10px, 1.8vh, 30px); }
+/* ---------- 签发模式 switch 与证书上传 ---------- */
+#mode-field .field-top { align-items: center; }
+.mode-switch { display: flex; border: 1px solid var(--line-2); margin-left: auto; }
+.mode-btn {
+  background: transparent; border: 0; color: var(--muted);
+  font: 500 10px/1 var(--mono); letter-spacing: 0.12em; padding: 7px 12px;
+  cursor: pointer; transition: color 0.15s, background 0.15s;
+}
+.mode-btn + .mode-btn { border-left: 1px solid var(--line-2); }
+.mode-btn:hover { color: var(--amber); }
+.mode-btn.active { background: var(--amber); color: #14100a; }
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
+.upload-grid .btn-ghost { padding: 10px 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.form-foot { margin-top: auto; padding-top: clamp(10px, 1.6vh, 30px); }
 .btn-mint {
   width: 100%; padding: clamp(12px, 1.9vh, 17px) 20px;
   background: var(--amber); color: #14100a; border: 0;
@@ -498,7 +530,7 @@ input[type="date"] {
 }
 .btn-mint:hover::after { left: 130%; }
 
-.status { margin-top: clamp(8px, 1.6vh, 15px); min-height: 18px; font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
+.status { margin-top: clamp(8px, 1.4vh, 15px); min-height: 18px; font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
 .status.ok { color: var(--green); }
 .status.err { color: var(--red); }
 
@@ -641,6 +673,7 @@ footer a:hover { color: var(--amber); }
   .cmdline-idx { display: none; }
   input, .multi-trigger, .multi-add input { font-size: 16px; } /* ≥16px 防 iOS 聚焦自动放大 */
   .form-row { grid-template-columns: 1fr; }
+  .upload-grid { grid-template-columns: 1fr; }
   .os-btn { padding: 12px 14px; }
   .btn-ghost { padding: 12px 14px; }
   .verify-row input { font-size: 16px; }
@@ -743,10 +776,29 @@ footer a:hover { color: var(--amber); }
           <div class="field-top"><span class="num">04</span><span class="field-name">到期日 / EXPIRY</span></div>
           <input name="expiryDate" type="date" required>
         </label>
+        <div class="field" id="mode-field" hidden>
+          <div class="field-top" id="mode-field-top">
+            <span class="num">05</span>
+            <span class="field-name">签发模式 / MODE</span>
+            <div class="mode-switch" id="mode-switch">
+              <button type="button" class="mode-btn active" data-mode="server">服务器证书</button>
+              <button type="button" class="mode-btn" data-mode="custom">自定义证书</button>
+            </div>
+          </div>
+        </div>
         <label class="field" id="token-field" hidden>
           <div class="field-top"><span class="num">05</span><span class="field-name">访问令牌 / TOKEN</span><span class="opt">ADMIN_TOKEN</span></div>
           <input name="token" type="password" placeholder="本服务已开启访问令牌">
         </label>
+        <div class="field" id="upload-field" hidden>
+          <div class="field-top"><span class="num">07</span><span class="field-name">证书与私钥 / CERT · KEY</span></div>
+          <div class="upload-grid">
+            <button type="button" class="btn-ghost upload-pick" id="cert-pick">选择证书…</button>
+            <button type="button" class="btn-ghost upload-pick" id="key-pick">选择私钥…</button>
+          </div>
+          <input type="file" id="cert-file" accept=".pem,.crt,.cer,.der" hidden>
+          <input type="file" id="key-file" accept=".pem,.key,.der" hidden>
+        </div>
         <div class="form-foot">
           <button class="btn-mint" type="submit"><span>签 发 K E Y</span></button>
           <p class="status" id="issue-status" role="status"></p>
@@ -854,6 +906,64 @@ footer a:hover { color: var(--amber); }
 
   if (SPEC) {
     if (SPEC.authRequired) document.getElementById("token-field").hidden = false;
+  }
+
+  /* ---- 签发模式：服务器证书 / 自定义证书（服务端 UPLOAD_CERT_MODE 开启时可用） ---- */
+  var issueMode = "server";
+  var uploadCertB64 = "";
+  var uploadKeyB64 = "";
+  if (SPEC && SPEC.uploadCertMode) {
+    document.getElementById("mode-field").hidden = false;
+    if (SPEC.authRequired) {
+      document.querySelector("#token-field .num").textContent = "06";
+      document.querySelector("#upload-field .num").textContent = "07";
+    } else {
+      document.querySelector("#upload-field .num").textContent = "06";
+    }
+    var modeButtons = document.querySelectorAll("#mode-switch .mode-btn");
+    var uploadFieldEl = document.getElementById("upload-field");
+    for (var mi = 0; mi < modeButtons.length; mi++) {
+      (function (btn) {
+        btn.addEventListener("click", function () {
+          issueMode = btn.getAttribute("data-mode");
+          for (var k = 0; k < modeButtons.length; k++) {
+            modeButtons[k].classList.toggle("active", modeButtons[k] === btn);
+          }
+          uploadFieldEl.hidden = issueMode !== "custom";
+        });
+      })(modeButtons[mi]);
+    }
+    var certFileInput = document.getElementById("cert-file");
+    var keyFileInput = document.getElementById("key-file");
+    var readFileB64 = function (input, cb) {
+      var file = input.files && input.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var bytes = new Uint8Array(reader.result);
+        var bin = "";
+        var CHUNK = 0x2000;
+        for (var i = 0; i < bytes.length; i += CHUNK) {
+          bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+        }
+        cb(window.btoa(bin));
+      };
+      reader.readAsArrayBuffer(file);
+    };
+    document.getElementById("cert-pick").addEventListener("click", function () { certFileInput.click(); });
+    document.getElementById("key-pick").addEventListener("click", function () { keyFileInput.click(); });
+    certFileInput.addEventListener("change", function () {
+      var f = certFileInput.files[0];
+      if (!f) return;
+      document.getElementById("cert-pick").textContent = "证书：" + f.name;
+      readFileB64(certFileInput, function (b64) { uploadCertB64 = b64; });
+    });
+    keyFileInput.addEventListener("change", function () {
+      var f = keyFileInput.files[0];
+      if (!f) return;
+      document.getElementById("key-pick").textContent = "私钥：" + f.name;
+      readFileB64(keyFileInput, function (b64) { uploadKeyB64 = b64; });
+    });
   }
 
   /* ---- 签发步骤指示：随操作点亮 ---- */
@@ -1081,12 +1191,20 @@ footer a:hover { color: var(--amber); }
       setStatus(statusEl, "请至少选择一个产品", "err");
       return;
     }
+    if (issueMode === "custom" && (!uploadCertB64 || !uploadKeyB64)) {
+      setStatus(statusEl, "自定义证书模式：请先选择证书与私钥文件", "err");
+      return;
+    }
     var payload = {
       licenseeName: String(fd.get("licenseeName") || "").trim(),
       assigneeName: String(fd.get("assigneeName") || "").trim(),
       expiryDate: String(fd.get("expiryDate") || "").trim(),
       products: products
     };
+    if (issueMode === "custom") {
+      payload.uploadCert = uploadCertB64;
+      payload.uploadKey = uploadKeyB64;
+    }
     var token = String(fd.get("token") || "").trim();
     var headers = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = "Bearer " + token;

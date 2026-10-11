@@ -126,6 +126,7 @@ npm run deploy
 | `COMMAND_UNIX` | Variable | 顶部命令行（Linux / macOS） | `curl -L -o km secmag.com && bash km` |
 | `MAX_NAME_LENGTH` | Variable | 名称最大长度 | `128` |
 | `LICENSE_ID_LENGTH` | Variable | licenseId 位数 | `10` |
+| `UPLOAD_CERT_MODE` | Variable | 开启「自定义证书」签发模式（页脚模式 switch，用户上传证书+私钥，当次请求内使用、不存储） | `false` |
 | `CORS_ORIGIN` | Variable | 跨域来源 | `*` |
 
 > 注意：修改 `SIGN_HASH` 后，用旧算法签发的 key 将无法通过 `/verify`（签名与算法绑定）。
@@ -167,6 +168,18 @@ const authCode = await response.text();   // 四段式 key
 | `X-Cert-Encoded` | 密文：PKCS#1(SHA256(TBS))，CA 公钥还原签名所得的 PKCS#1 编码块 |
 
 跨域读取需带上这两个 `Access-Control-Expose-Headers`（服务端已默认返回）。
+
+#### 自定义证书模式（`UPLOAD_CERT_MODE=true` 时开放）
+
+JSON 入参可额外携带 `uploadCert` / `uploadKey`（X.509 证书与 PKCS#8 私钥，
+支持 PEM 或 DER 的 Base64）：签发改用该材料，`seg2` 由上传私钥签名、`seg3` 为上传证书，
+签出的 key 需用**该证书**验证（而非 `GET /cert` 的服务器证书）。
+
+- 服务端校验证书可解析且**证书公钥与私钥配对**，不配对返回 400
+- 材料仅当次请求内使用，**不存储**
+- 响应头 `X-Cert-Signature` / `X-Cert-Encoded` 按上传证书计算
+- 配置了 `ADMIN_TOKEN` 时，该模式同样需要令牌；强烈建议开启此模式时同时配置 `ADMIN_TOKEN`
+- 未开启 `UPLOAD_CERT_MODE` 时携带上传参数返回 403
 
 ### `POST /verify` — 校验
 

@@ -5,7 +5,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateLicenseKey, verifyLicenseKey, resolveProducts, splitKey, randomLicenseId, certSignatureInfo } from '../src/license.js';
+import { generateLicenseKey, verifyLicenseKey, resolveProducts, splitKey, randomLicenseId, certSignatureInfo, validateIssuanceMaterial } from '../src/license.js';
 import { CONFIG, resolveConfig } from '../src/config.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -164,5 +164,34 @@ if (existsSync(realDerPath)) {
   assert(emHex.slice(-102, -64) === '3031300d060960864801650304020105000420', '证书签名详情：EM 含 DigestInfo(SHA-256)');
   assert(emHex.slice(-104, -102) === '00', '证书签名详情：0x00 分隔符紧邻 DigestInfo');
 }
+
+// —— 自定义证书签发材料：配对校验（fake cert = DER 包裹真实 SPKI）——
+const derSeq = (content) => {
+  const head = content.length < 128 ? [0x30, content.length] : [0x30, 0x82, content.length >> 8, content.length & 0xff];
+  return new Uint8Array([...head, ...content]);
+};
+const fakeCertB64Of = (spki) =>
+  toB64(new Uint8Array([...derSeq(derSeq(spki)), 0x03, 0x02, 0x00, 0x00]));
+
+const spkiA = new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey));
+const okMat = await validateIssuanceMaterial(fakeCertB64Of(spkiA), toB64(pkcs8));
+assert(okMat.ok, '自定义材料：配对的证书+私钥通过');
+
+const pemWrapped = '-----BEGIN CERTIFICATE-----\n' + fakeCertB64Of(spkiA).replace(/(.{64})/g, '$1\n') + '\n-----END CERTIFICATE-----\n';
+const pemKey = '-----BEGIN PRIVATE KEY-----\n' + toB64(pkcs8).replace(/(.{64})/g, '$1\n') + '\n-----END PRIVATE KEY-----\n';
+assert((await validateIssuanceMaterial(pemWrapped, pemKey)).ok, '自定义材料：PEM 包装输入通过');
+
+const pair2 = await crypto.subtle.generateKey(
+  { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: CONFIG.signHash },
+  true, ['sign', 'verify'],
+);
+const spkiB = new Uint8Array(await crypto.subtle.exportKey('spki', pair2.publicKey));
+const badMat = await validateIssuanceMaterial(fakeCertB64Of(spkiB), toB64(pkcs8));
+assert(!badMat.ok && badMat.error.includes('不配对'), '自定义材料：证书与私钥不配对被拒绝');
+
+const badCert = await validateIssuanceMaterial(toB64(new TextEncoder().encode('not a cert')), toB64(pkcs8));
+assert(!badCert.ok && badCert.error.includes('证书解析失败'), '自定义材料：非法证书被拒绝');
+const badKey = await validateIssuanceMaterial(fakeCertB64Of(spkiA), toB64(new TextEncoder().encode('not a key')));
+assert(!badKey.ok && badKey.error.includes('私钥解析失败'), '自定义材料：非法私钥被拒绝');
 
 console.log('\n全部测试通过');

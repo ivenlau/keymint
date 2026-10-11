@@ -47,6 +47,10 @@ export const CONFIG = {
 
   // 输入限制
   maxNameLength: 128,
+
+  // 自定义证书签发模式：开启后页面出现模式 switch，
+  // 用户可上传「证书 + 私钥」（当次请求内使用、不存储）签发自己的 key。
+  uploadCertMode: true,
 };
 
 /* ------------------------------------------------------------------ */
@@ -109,5 +113,6 @@ export function resolveConfig(env = {}) {
     commandWindows: envStr(env, 'COMMAND_WINDOWS', CONFIG.commandWindows),
     commandUnix: envStr(env, 'COMMAND_UNIX', CONFIG.commandUnix),
     maxNameLength: Math.max(1, envNum(env, 'MAX_NAME_LENGTH', CONFIG.maxNameLength)),
+    uploadCertMode: envBool(env, 'UPLOAD_CERT_MODE', CONFIG.uploadCertMode),
   };
 }

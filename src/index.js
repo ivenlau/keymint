@@ -621,9 +621,8 @@ footer a:hover { color: var(--amber); }
 @media (max-width: 920px) {
   .layout { grid-template-columns: 1fr; }
   .layout > .panel { min-width: 0; }
-  /* 印章移到标题两行文字左侧（O== 布局；row-reverse 使 DOM 中的文字保持先读） */
-  .mast-top { flex-direction: row-reverse; align-items: center; justify-content: flex-end; gap: 14px; }
-  .seal { width: clamp(56px, 9vw, 84px); height: clamp(56px, 9vw, 84px); flex: none; }
+  /* 移动端隐藏印章，节省窗口空间 */
+  .seal { display: none; }
   .wrap { height: auto; min-height: 100vh; min-height: 100dvh; padding: 20px 16px 24px; }
   .panel { padding: 18px; }
   .keybox:not(.sig-box) { height: clamp(180px, 30vh, 280px); flex: none; } /* 移动端固定高度 + 框内滚动（弹窗 sig-box 除外） */

@@ -523,6 +523,8 @@ input[type="date"] {
 .mode-btn.active { background: var(--amber); color: #14100a; }
 .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
 .upload-grid .btn-ghost { padding: 10px 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* file input 不能 display:none（Safari/iOS 下 click() 不弹选择框），视觉隐藏但保留渲染 */
+.file-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); pointer-events: none; }
 
 .form-foot { margin-top: auto; padding-top: clamp(10px, 1.6vh, 30px); }
 .btn-mint {
@@ -907,8 +909,8 @@ footer a:hover { color: var(--amber); }
           <button type="button" class="btn-ghost upload-pick" id="cert-pick">选择证书…</button>
           <button type="button" class="btn-ghost upload-pick" id="key-pick">选择私钥…</button>
         </div>
-        <input type="file" id="cert-file" accept=".pem,.crt,.cer,.der" hidden>
-        <input type="file" id="key-file" accept=".pem,.key,.der" hidden>
+        <input type="file" id="cert-file" class="file-hidden" accept=".pem,.crt,.cer,.der">
+        <input type="file" id="key-file" class="file-hidden" accept=".pem,.key,.der">
         <p class="upload-note">证书公钥须与私钥配对；材料仅在本次页面会话内缓存，签发与校验使用该证书</p>
       </div>
 
@@ -1017,6 +1019,9 @@ footer a:hover { color: var(--amber); }
       };
       reader.readAsArrayBuffer(file);
     };
+
+    document.getElementById("cert-pick").addEventListener("click", function () { certFileInput.click(); });
+    document.getElementById("key-pick").addEventListener("click", function () { keyFileInput.click(); });
 
     certFileInput.addEventListener("change", function () {
       var f = certFileInput.files[0];

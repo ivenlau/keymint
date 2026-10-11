@@ -413,7 +413,12 @@ input:focus {
   background: rgba(227, 164, 75, 0.05);
 }
 input::placeholder { color: var(--faint); }
-input[type="date"] { color-scheme: dark; }
+input[type="date"] {
+  color-scheme: dark;
+  min-width: 0;
+  -webkit-appearance: none; /* iOS/安卓日期控件固有宽度会导致与其他输入框不对齐 */
+  appearance: none;
+}
 
 /* ---------- 产品多选下拉 ---------- */
 .multi { position: relative; }
@@ -587,7 +592,11 @@ input[type="date"] { color-scheme: dark; }
 .sig-block .field-top { flex-wrap: wrap; row-gap: 8px; }
 .sig-block .opt { letter-spacing: 0.08em; }
 .sig-block .btn-ghost { margin-left: 10px; padding: 6px 10px; font-size: 10px; flex: none; }
-.sig-box { height: auto; margin-top: 2px; font-size: 10px; line-height: 1.7; overflow: hidden; }
+.sig-box {
+  height: clamp(132px, 20vh, 200px); /* 固定高度 + 框内纵向滚动（滚动条沿用 .keybox 样式） */
+  margin-top: 2px; font-size: 10px; line-height: 1.7;
+  overflow: hidden auto;
+}
 .sig-box.empty { color: var(--faint); border-left-color: var(--line-2); }
 
 /* ---------- 页脚 ---------- */
@@ -612,11 +621,12 @@ footer a:hover { color: var(--amber); }
 @media (max-width: 920px) {
   .layout { grid-template-columns: 1fr; }
   .layout > .panel { min-width: 0; }
-  .mast-top { flex-direction: column-reverse; }
-  .seal { width: 72px; height: 72px; }
+  /* 印章移到标题两行文字左侧（O== 布局；row-reverse 使 DOM 中的文字保持先读） */
+  .mast-top { flex-direction: row-reverse; align-items: center; justify-content: flex-end; gap: 14px; }
+  .seal { width: clamp(56px, 9vw, 84px); height: clamp(56px, 9vw, 84px); flex: none; }
   .wrap { height: auto; min-height: 100vh; min-height: 100dvh; padding: 20px 16px 24px; }
   .panel { padding: 18px; }
-  .keybox { min-height: 150px; }
+  .keybox:not(.sig-box) { height: clamp(180px, 30vh, 280px); flex: none; } /* 移动端固定高度 + 框内滚动（弹窗 sig-box 除外） */
   .seg-row { grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1.2fr) 64px; gap: 8px; font-size: 11px; }
   .seg-len { white-space: nowrap; }
   .seg-badge { font-size: 9px; }
@@ -732,7 +742,7 @@ footer a:hover { color: var(--amber); }
         </div>
         <label class="field">
           <div class="field-top"><span class="num">04</span><span class="field-name">到期日 / EXPIRY</span></div>
-          <input name="expiryDate" type="date" required value="2026-12-31">
+          <input name="expiryDate" type="date" required>
         </label>
         <label class="field" id="token-field" hidden>
           <div class="field-top"><span class="num">05</span><span class="field-name">访问令牌 / TOKEN</span><span class="opt">ADMIN_TOKEN</span></div>
@@ -835,6 +845,13 @@ footer a:hover { color: var(--amber); }
   var verifyStatus = document.getElementById("verify-status");
   var viewSigBtn = document.getElementById("view-sig-btn");
   var lastKey = "";
+
+  /* 到期日默认当前时间一年后 */
+  var expiryInput = form.querySelector('input[name="expiryDate"]');
+  var d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  var pad2 = function (n) { return (n < 10 ? "0" : "") + n; };
+  expiryInput.value = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
 
   if (SPEC) {
     if (SPEC.authRequired) document.getElementById("token-field").hidden = false;

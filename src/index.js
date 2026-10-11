@@ -498,9 +498,21 @@ input[type="date"] {
 .multi-add input { flex: 1; width: auto; padding: 8px 10px; font-size: 12px; }
 .multi-add .btn-ghost { padding: 8px 12px; letter-spacing: 0.1em; flex: none; }
 
-/* ---------- 签发模式 switch 与证书上传 ---------- */
-#mode-field .field-top { align-items: center; }
-.mode-switch { display: flex; border: 1px solid var(--line-2); margin-left: auto; }
+/* ---------- 签发模式徽标（页面右上角）与模式弹窗 ---------- */
+.mast-right { display: flex; align-items: center; gap: 14px; flex: none; }
+.mode-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: transparent; border: 1px solid var(--line-2); color: var(--muted);
+  font: 500 10px/1 var(--mono); letter-spacing: 0.14em; padding: 9px 12px;
+  cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
+.mode-badge:hover { color: var(--amber); border-color: var(--amber); }
+.mode-badge .mode-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.mode-badge.custom { color: var(--amber); border-color: rgba(227, 164, 75, 0.55); }
+.mode-badge.custom .mode-dot { background: var(--amber); box-shadow: 0 0 6px rgba(227, 164, 75, 0.7); }
+.mode-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.upload-note { margin-top: 8px; font-size: 9px; color: var(--faint); letter-spacing: 0.05em; line-height: 1.6; }
+.mode-switch { display: flex; border: 1px solid var(--line-2); }
 .mode-btn {
   background: transparent; border: 0; color: var(--muted);
   font: 500 10px/1 var(--mono); letter-spacing: 0.12em; padding: 7px 12px;
@@ -697,17 +709,22 @@ footer a:hover { color: var(--amber); }
         <div class="kicker">KEY MINT · 签发台</div>
         <h1>__UI_TITLE__ <em>__UI_ACCENT__</em></h1>
       </div>
-      <svg class="seal" viewBox="0 0 120 120" aria-hidden="true">
-        <circle cx="60" cy="60" r="56" fill="none" stroke="rgba(227,164,75,0.5)" stroke-width="1"/>
-        <circle class="ring" cx="60" cy="60" r="46" fill="none" stroke="rgba(227,164,75,0.3)" stroke-width="1" stroke-dasharray="2 5"/>
-        <circle cx="60" cy="60" r="34" fill="none" stroke="rgba(227,164,75,0.55)" stroke-width="1.5"/>
-        <g stroke="rgba(227,164,75,0.65)" stroke-width="1.5">
-          <line x1="60" y1="6" x2="60" y2="16"/><line x1="60" y1="104" x2="60" y2="114"/>
-          <line x1="6" y1="60" x2="16" y2="60"/><line x1="104" y1="60" x2="114" y2="60"/>
-        </g>
-        <text x="60" y="57" text-anchor="middle" fill="#e3a44b" font-family="IBM Plex Mono, monospace" font-size="13" letter-spacing="1">RSA</text>
-        <text x="60" y="73" text-anchor="middle" fill="rgba(240,231,212,0.75)" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="2">4096</text>
-      </svg>
+      <div class="mast-right">
+        <button type="button" class="mode-badge" id="mode-badge" hidden>
+          <span class="mode-dot"></span><span id="mode-badge-text">服务器证书</span>
+        </button>
+        <svg class="seal" viewBox="0 0 120 120" aria-hidden="true">
+          <circle cx="60" cy="60" r="56" fill="none" stroke="rgba(227,164,75,0.5)" stroke-width="1"/>
+          <circle class="ring" cx="60" cy="60" r="46" fill="none" stroke="rgba(227,164,75,0.3)" stroke-width="1" stroke-dasharray="2 5"/>
+          <circle cx="60" cy="60" r="34" fill="none" stroke="rgba(227,164,75,0.55)" stroke-width="1.5"/>
+          <g stroke="rgba(227,164,75,0.65)" stroke-width="1.5">
+            <line x1="60" y1="6" x2="60" y2="16"/><line x1="60" y1="104" x2="60" y2="114"/>
+            <line x1="6" y1="60" x2="16" y2="60"/><line x1="104" y1="60" x2="114" y2="60"/>
+          </g>
+          <text x="60" y="57" text-anchor="middle" fill="#e3a44b" font-family="IBM Plex Mono, monospace" font-size="13" letter-spacing="1">RSA</text>
+          <text x="60" y="73" text-anchor="middle" fill="rgba(240,231,212,0.75)" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="2">4096</text>
+        </svg>
+      </div>
     </div>
     <div class="mast-steps" id="mast-steps">
       <span class="step done" data-step="1"><span class="step-num">01</span>安装命令</span>
@@ -776,29 +793,10 @@ footer a:hover { color: var(--amber); }
           <div class="field-top"><span class="num">04</span><span class="field-name">到期日 / EXPIRY</span></div>
           <input name="expiryDate" type="date" required>
         </label>
-        <div class="field" id="mode-field" hidden>
-          <div class="field-top" id="mode-field-top">
-            <span class="num">05</span>
-            <span class="field-name">签发模式 / MODE</span>
-            <div class="mode-switch" id="mode-switch">
-              <button type="button" class="mode-btn active" data-mode="server">服务器证书</button>
-              <button type="button" class="mode-btn" data-mode="custom">自定义证书</button>
-            </div>
-          </div>
-        </div>
         <label class="field" id="token-field" hidden>
           <div class="field-top"><span class="num">05</span><span class="field-name">访问令牌 / TOKEN</span><span class="opt">ADMIN_TOKEN</span></div>
           <input name="token" type="password" placeholder="本服务已开启访问令牌">
         </label>
-        <div class="field" id="upload-field" hidden>
-          <div class="field-top"><span class="num">07</span><span class="field-name">证书与私钥 / CERT · KEY</span></div>
-          <div class="upload-grid">
-            <button type="button" class="btn-ghost upload-pick" id="cert-pick">选择证书…</button>
-            <button type="button" class="btn-ghost upload-pick" id="key-pick">选择私钥…</button>
-          </div>
-          <input type="file" id="cert-file" accept=".pem,.crt,.cer,.der" hidden>
-          <input type="file" id="key-file" accept=".pem,.key,.der" hidden>
-        </div>
         <div class="form-foot">
           <button class="btn-mint" type="submit"><span>签 发 K E Y</span></button>
           <p class="status" id="issue-status" role="status"></p>
@@ -882,6 +880,47 @@ footer a:hover { color: var(--amber); }
   </div>
 </div>
 
+<div class="modal" id="mode-modal" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="mode-modal-title">
+    <div class="modal-head">
+      <div>
+        <span class="idx">MODE / 00</span>
+        <h2 id="mode-modal-title">签发模式</h2>
+      </div>
+      <button type="button" class="modal-close" data-close aria-label="关闭">×</button>
+    </div>
+    <p class="modal-sub" id="mode-modal-sub">当前：服务器证书 · 签发与校验使用服务器预设证书</p>
+
+    <div class="modal-scroll">
+      <div class="field">
+        <div class="field-top"><span class="num">01</span><span class="field-name">证书来源 / SOURCE</span></div>
+        <div class="mode-switch" id="mode-switch">
+          <button type="button" class="mode-btn active" data-mode="server">服务器证书</button>
+          <button type="button" class="mode-btn" data-mode="custom">自定义证书</button>
+        </div>
+      </div>
+
+      <div class="field" id="upload-field" hidden>
+        <div class="field-top"><span class="num">02</span><span class="field-name">证书与私钥 / CERT · KEY</span></div>
+        <div class="upload-grid">
+          <button type="button" class="btn-ghost upload-pick" id="cert-pick">选择证书…</button>
+          <button type="button" class="btn-ghost upload-pick" id="key-pick">选择私钥…</button>
+        </div>
+        <input type="file" id="cert-file" accept=".pem,.crt,.cer,.der" hidden>
+        <input type="file" id="key-file" accept=".pem,.key,.der" hidden>
+        <p class="upload-note">证书公钥须与私钥配对；材料仅在本次页面会话内缓存，签发与校验使用该证书</p>
+      </div>
+
+      <div class="mode-actions">
+        <button type="button" class="btn-ghost" id="clear-cert" hidden>清除证书</button>
+      </div>
+
+      <p class="status" id="mode-status" role="status"></p>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -908,33 +947,61 @@ footer a:hover { color: var(--amber); }
     if (SPEC.authRequired) document.getElementById("token-field").hidden = false;
   }
 
-  /* ---- 签发模式：服务器证书 / 自定义证书（服务端 UPLOAD_CERT_MODE 开启时可用） ---- */
+  /* ---- 签发模式（页面级）：服务器证书 / 自定义证书 ----
+   * 自定义证书在页面会话内存中缓存（不落存储，刷新即失效），
+   * 签发与校验均使用它；清除或未上传时回退服务器证书模式。 */
   var issueMode = "server";
-  var uploadCertB64 = "";
-  var uploadKeyB64 = "";
-  if (SPEC && SPEC.uploadCertMode) {
-    document.getElementById("mode-field").hidden = false;
-    if (SPEC.authRequired) {
-      document.querySelector("#token-field .num").textContent = "06";
-      document.querySelector("#upload-field .num").textContent = "07";
-    } else {
-      document.querySelector("#upload-field .num").textContent = "06";
+  var certCache = null;
+  var modeModal = document.getElementById("mode-modal");
+  var modeModalSub = document.getElementById("mode-modal-sub");
+  var modeStatus = document.getElementById("mode-status");
+  var modeBadge = document.getElementById("mode-badge");
+  var modeBadgeText = document.getElementById("mode-badge-text");
+  var modeButtons = document.querySelectorAll("#mode-switch .mode-btn");
+  var uploadFieldEl = document.getElementById("upload-field");
+  var clearCertBtn = document.getElementById("clear-cert");
+  var certFileInput = document.getElementById("cert-file");
+  var keyFileInput = document.getElementById("key-file");
+
+  function customActive() { return issueMode === "custom" && !!certCache; }
+
+  function refreshModeUi() {
+    var custom = customActive();
+    modeBadge.classList.toggle("custom", custom);
+    modeBadgeText.textContent = custom ? "自定义证书" : "服务器证书";
+    modeModalSub.textContent = custom
+      ? "当前：自定义证书（" + certCache.certName + "）· 签发与校验使用该证书"
+      : "当前：服务器证书 · 签发与校验使用服务器预设证书";
+    for (var k = 0; k < modeButtons.length; k++) {
+      modeButtons[k].classList.toggle("active", modeButtons[k].getAttribute("data-mode") === issueMode);
     }
-    var modeButtons = document.querySelectorAll("#mode-switch .mode-btn");
-    var uploadFieldEl = document.getElementById("upload-field");
+    uploadFieldEl.hidden = issueMode !== "custom";
+    clearCertBtn.hidden = !certCache;
+  }
+
+  function openModeModal() {
+    refreshModeUi();
+    modeModal.hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+  function closeModeModal() {
+    modeModal.hidden = true;
+    document.body.style.overflow = "";
+  }
+
+  if (SPEC && SPEC.uploadCertMode) {
+    modeBadge.hidden = false;
+    modeBadge.addEventListener("click", openModeModal);
+
     for (var mi = 0; mi < modeButtons.length; mi++) {
       (function (btn) {
         btn.addEventListener("click", function () {
           issueMode = btn.getAttribute("data-mode");
-          for (var k = 0; k < modeButtons.length; k++) {
-            modeButtons[k].classList.toggle("active", modeButtons[k] === btn);
-          }
-          uploadFieldEl.hidden = issueMode !== "custom";
+          refreshModeUi();
         });
       })(modeButtons[mi]);
     }
-    var certFileInput = document.getElementById("cert-file");
-    var keyFileInput = document.getElementById("key-file");
+
     var readFileB64 = function (input, cb) {
       var file = input.files && input.files[0];
       if (!file) return;
@@ -950,19 +1017,48 @@ footer a:hover { color: var(--amber); }
       };
       reader.readAsArrayBuffer(file);
     };
-    document.getElementById("cert-pick").addEventListener("click", function () { certFileInput.click(); });
-    document.getElementById("key-pick").addEventListener("click", function () { keyFileInput.click(); });
+
     certFileInput.addEventListener("change", function () {
       var f = certFileInput.files[0];
       if (!f) return;
-      document.getElementById("cert-pick").textContent = "证书：" + f.name;
-      readFileB64(certFileInput, function (b64) { uploadCertB64 = b64; });
+      readFileB64(certFileInput, function (b64) {
+        certCache = certCache || { certName: "", keyName: "" };
+        certCache.certB64 = b64;
+        certCache.certName = f.name;
+        if (certCache.keyB64) issueMode = "custom";
+        refreshModeUi();
+        setStatus(modeStatus, "证书已缓存（" + f.name + "）" + (certCache.keyB64 ? "，已切换到自定义证书模式" : "，请再选择私钥"), "ok");
+      });
     });
     keyFileInput.addEventListener("change", function () {
       var f = keyFileInput.files[0];
       if (!f) return;
-      document.getElementById("key-pick").textContent = "私钥：" + f.name;
-      readFileB64(keyFileInput, function (b64) { uploadKeyB64 = b64; });
+      readFileB64(keyFileInput, function (b64) {
+        certCache = certCache || { certName: "", keyName: "" };
+        certCache.keyB64 = b64;
+        certCache.keyName = f.name;
+        if (certCache.certB64) issueMode = "custom";
+        refreshModeUi();
+        setStatus(modeStatus, "私钥已缓存（" + f.name + "）" + (certCache.certB64 ? "，已切换到自定义证书模式" : "，请再选择证书"), "ok");
+      });
+    });
+
+    clearCertBtn.addEventListener("click", function () {
+      certCache = null;
+      issueMode = "server";
+      certFileInput.value = "";
+      keyFileInput.value = "";
+      document.getElementById("cert-pick").textContent = "选择证书…";
+      document.getElementById("key-pick").textContent = "选择私钥…";
+      refreshModeUi();
+      setStatus(modeStatus, "已清除证书，回到服务器证书模式", "ok");
+    });
+
+    modeModal.addEventListener("click", function (e) {
+      if (e.target && e.target.getAttribute && e.target.getAttribute("data-close") !== null) closeModeModal();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !modeModal.hidden) closeModeModal();
     });
   }
 
@@ -1191,8 +1287,8 @@ footer a:hover { color: var(--amber); }
       setStatus(statusEl, "请至少选择一个产品", "err");
       return;
     }
-    if (issueMode === "custom" && (!uploadCertB64 || !uploadKeyB64)) {
-      setStatus(statusEl, "自定义证书模式：请先选择证书与私钥文件", "err");
+    if (issueMode === "custom" && !certCache) {
+      setStatus(statusEl, "自定义证书模式：请先在右上角上传证书与私钥", "err");
       return;
     }
     var payload = {
@@ -1201,9 +1297,9 @@ footer a:hover { color: var(--amber); }
       expiryDate: String(fd.get("expiryDate") || "").trim(),
       products: products
     };
-    if (issueMode === "custom") {
-      payload.uploadCert = uploadCertB64;
-      payload.uploadKey = uploadKeyB64;
+    if (customActive()) {
+      payload.uploadCert = certCache.certB64;
+      payload.uploadKey = certCache.keyB64;
     }
     var token = String(fd.get("token") || "").trim();
     var headers = { "Content-Type": "application/json" };
@@ -1238,26 +1334,96 @@ footer a:hover { color: var(--amber); }
       .then(function () { btn.disabled = false; });
   });
 
+  /* ---- 自定义模式本地校验：用 key 内嵌证书（seg3）的公钥验签 ---- */
+  function b64ToBytesLocal(b64) {
+    var bin = atob(b64);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function readTlvLocal(buf, pos) {
+    var tag = buf[pos];
+    var length = buf[pos + 1];
+    var headerLen = 2;
+    if (length & 0x80) {
+      var n = length & 0x7f;
+      length = 0;
+      for (var i = 0; i < n; i++) length = length * 256 + buf[pos + 2 + i];
+      headerLen = 2 + n;
+    }
+    return { tag: tag, start: pos, contentStart: pos + headerLen, contentEnd: pos + headerLen + length };
+  }
+  function verifyLocal(key) {
+    var fail = function (msg) { return Promise.resolve({ valid: false, error: msg }); };
+    var parts = key.split("-");
+    if (parts.length !== 4) return fail("分段数应为 4，实际 " + parts.length);
+    var payloadBytes, sigBytes, certBytes;
+    try {
+      payloadBytes = b64ToBytesLocal(parts[1]);
+      sigBytes = b64ToBytesLocal(parts[2]);
+      certBytes = b64ToBytesLocal(parts[3]);
+    } catch (e) { return fail("Base64 解码失败"); }
+    var payload = null;
+    try { payload = JSON.parse(new TextDecoder("utf-8").decode(payloadBytes)); } catch (e) { return fail("seg1 不是合法的 payload JSON"); }
+    if (payload.licenseId && payload.licenseId !== parts[0]) return fail("licenseId 与 payload 不一致");
+    var alg = { name: "RSASSA-PKCS1-v1_5", hash: (SPEC && SPEC.signHash) || "SHA-1" };
+    var root = readTlvLocal(certBytes, 0);
+    if (root.tag !== 0x30) return fail("seg3 不是合法的证书");
+    var tbs = readTlvLocal(certBytes, root.contentStart);
+    var pos = tbs.contentStart;
+    var imported = null;
+    function tryNext() {
+      if (imported) return Promise.resolve(null);
+      if (pos >= tbs.contentEnd) return Promise.resolve("证书内未找到公钥");
+      var tlv = readTlvLocal(certBytes, pos);
+      pos = tlv.contentEnd;
+      if (tlv.tag !== 0x30) return tryNext();
+      // SPKI 需要完整 TLV；用 slice 拷贝规避非零偏移视图的 importKey 兼容问题
+      return crypto.subtle.importKey("spki", certBytes.slice(tlv.start, tlv.contentEnd), alg, true, ["verify"])
+        .then(function (k) { imported = k; return tryNext(); })
+        .catch(function () { return tryNext(); });
+    }
+    return tryNext().then(function (err) {
+      if (err) return { valid: false, error: err };
+      return crypto.subtle.verify("RSASSA-PKCS1-v1_5", imported, sigBytes, payloadBytes).then(function (ok) {
+        if (!ok) return { valid: false, error: "签名验证失败" };
+        var expiry = (payload.products && payload.products[0]) ? payload.products[0].paidUpTo : "—";
+        return { valid: true, text: "签名有效 · " + payload.licenseId + " · " + payload.licenseeName + " · 到期 " + expiry };
+      });
+    });
+  }
+
   verifyBtn.addEventListener("click", function () {
     var key = verifyInput.value.trim();
     if (!key) { setStatus(verifyStatus, "请先粘贴 KEY", "err"); return; }
     verifyBtn.disabled = true;
     setStatus(verifyStatus, "校验中…", "");
-    fetch("/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: key })
-    })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        if (data.valid && data.payload) {
-          var p = data.payload;
-          var expiry = (p.products && p.products[0]) ? p.products[0].paidUpTo : "—";
-          setStatus(verifyStatus, "签名有效 · " + p.licenseId + " · " + p.licenseeName + " · 到期 " + expiry, "ok");
-        } else {
-          setStatus(verifyStatus, "无效：" + (data.error || "未知原因"), "err");
-        }
+    var p;
+    if (customActive()) {
+      p = verifyLocal(key);
+    } else {
+      p = fetch("/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: key })
       })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.valid && data.payload) {
+            var pl = data.payload;
+            var expiry = (pl.products && pl.products[0]) ? pl.products[0].paidUpTo : "—";
+            data.text = "签名有效 · " + pl.licenseId + " · " + pl.licenseeName + " · 到期 " + expiry;
+          }
+          return data;
+        });
+    }
+    p.then(function (data) {
+      if (data.valid) {
+        setStatus(verifyStatus, data.text || "签名有效", "ok");
+      } else {
+        setStatus(verifyStatus, "无效：" + (data.error || "未知原因"), "err");
+      }
+    })
       .catch(function (err) { setStatus(verifyStatus, "校验失败：" + err.message, "err"); })
       .then(function () { verifyBtn.disabled = false; });
   });

@@ -2,7 +2,10 @@
  * Cloudflare Worker：自定义 Key 签发台
  *
  * 路由：
- *   GET  /        签发网页
+ *   GET  /             按 User-Agent 协商：命令行客户端返回安装脚本（irm … | iex、
+ *                      curl … && bash km 等安装命令的下载端点），浏览器返回签发网页
+ *   GET  /install.ps1  PowerShell 安装脚本（不协商，直接返回）
+ *   GET  /install.sh   bash 安装脚本（不协商，直接返回）
  *   POST /getKey  签发 key（create_key.md 契约：JSON 入参，纯文本返回）。
  *                 响应头附带证书签名详情（受 ADMIN_TOKEN 保护）：
  *                   X-Cert-Signature  证书 CA 签名值（十进制）
@@ -15,6 +18,8 @@
  *   CERT_DER_B64            X.509 证书（DER 的 Base64，嵌入每个 key 的 seg3）
  *   PUBLIC_KEY_SPKI_B64     证书公钥（SPKI DER 的 Base64，供 /verify 使用）
  *   ADMIN_TOKEN             可选；配置后 /getKey 需携带访问令牌
+ *   PS_SCRIPT / SH_SCRIPT   可选；http(s) 脚本文件地址，未配置时用内置兜底脚本
+ *                           （assets/，见 src/installer.js）
  */
 import { resolveConfig } from './config.js';
 import {
@@ -26,6 +31,12 @@ import {
   derToPem,
 } from './license.js';
 import { loadAdminTokens } from './tokens.js';
+import {
+  detectScriptKind,
+  loadInstallScript,
+  withUtf8Bom,
+  withoutUtf8Bom,
+} from './installer.js';
 
 /* ------------------------------ HTTP 辅助 ------------------------------ */
 
@@ -212,6 +223,20 @@ function handleIcon() {
   });
 }
 
+/* 安装脚本（irm … | iex / curl … && bash km 的下载端点）。
+ * ps1 确保 UTF-8 BOM（Windows PowerShell 5.1 存文件执行时依赖），
+ * sh 确保无 BOM（shebang 前的 BOM 会让 bash 报错）。
+ * charset 必须显式声明：PowerShell 5.1 的 irm 无 charset 时按 ISO-8859-1 解码。 */
+async function handleInstallScript(kind, env) {
+  let body = await loadInstallScript(kind, env);
+  body = kind === 'ps1' ? withUtf8Bom(body) : withoutUtf8Bom(body);
+  return text(body, 200, env, {
+    'Content-Type':
+      kind === 'ps1' ? 'text/plain; charset=utf-8' : 'text/x-shellscript; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+}
+
 function handlePage(env) {
   const cfg = resolveConfig(env);
   const spec = {
@@ -244,7 +269,14 @@ export default {
     }
 
     try {
-      if (url.pathname === '/' && request.method === 'GET') return handlePage(env);
+      if (url.pathname === '/' && request.method === 'GET') {
+        // UA 协商：命令行客户端（irm|iex、curl|bash 等）拿安装脚本，浏览器拿网页
+        const kind = detectScriptKind(request.headers.get('user-agent'));
+        if (kind) return await handleInstallScript(kind, env);
+        return handlePage(env);
+      }
+      if (url.pathname === '/install.ps1' && request.method === 'GET') return handleInstallScript('ps1', env);
+      if (url.pathname === '/install.sh' && request.method === 'GET') return handleInstallScript('sh', env);
       if (url.pathname === '/favicon.svg') return handleIcon();
       if (url.pathname === '/getKey' && request.method === 'POST') return handleGetKey(request, env);
       if (url.pathname === '/verify' && request.method === 'POST') return handleVerify(request, env);

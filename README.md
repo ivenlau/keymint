@@ -128,6 +128,8 @@ npm run deploy
 | `LICENSE_ID_LENGTH` | Variable | licenseId 位数 | `10` |
 | `UPLOAD_CERT_MODE` | Variable | 开启「自定义证书」签发模式（页脚模式 switch，用户上传证书+私钥，当次请求内使用、不存储） | `false` |
 | `CORS_ORIGIN` | Variable | 跨域来源 | `*` |
+| `PS_SCRIPT` | Secret | PowerShell 安装脚本的 http(s) 文件地址（未配置时用内置兜底脚本 `assets/install.ps1`） | 空 = 内置脚本 |
+| `SH_SCRIPT` | Secret | bash 安装脚本的 http(s) 文件地址（未配置时用内置兜底脚本 `assets/install.sh`） | 空 = 内置脚本 |
 
 > 注意：修改 `SIGN_HASH` 后，用旧算法签发的 key 将无法通过 `/verify`（签名与算法绑定）。
 
@@ -192,6 +194,26 @@ const authCode = await response.text();   // 四段式 key
 
 返回 seg3 证书的 PEM，供你的产品侧内置/信任。
 
+### `GET /` — 按 User-Agent 协商（安装命令的分发端点）
+
+同一个根地址，按客户端返回不同内容，串起页面顶部的安装命令：
+
+| 客户端 | 识别依据（User-Agent） | 返回 |
+|---|---|---|
+| PowerShell（`irm secmag.com\|iex`） | `WindowsPowerShell/…`、`PowerShell/…`（含 Linux/mac 的 pwsh） | PowerShell 脚本（UTF-8 BOM，`text/plain; charset=utf-8`） |
+| curl / wget / httpie 等（`curl -L -o km secmag.com && bash km`） | `curl/…`、`Wget/…` 等 | bash 脚本（强制无 BOM，`text/x-shellscript; charset=utf-8`） |
+| 浏览器 / 其他 | — | 签发网页（现有行为） |
+
+也可以用显式路径绕过协商，直接取指定脚本：**`GET /install.ps1`**、**`GET /install.sh`**。
+
+脚本来源（`PS_SCRIPT` / `SH_SCRIPT`，配置方式同 `ADMIN_TOKEN` 的文件地址模式）：
+
+- **必须是 `http(s)://` 文件地址**，指向真正的脚本文件；修改文件内容即更新脚本，无需重新部署
+  （内容缓存约 **60 秒**；拉取失败沿用上一次成功内容，再不行回退内置脚本）；
+- 未配置 / 地址无效 / 拉取彻底失败时，使用**内置兜底脚本** `assets/install.ps1` / `assets/install.sh`
+  （随 Worker 一起部署，改内容需重新部署）——保证安装命令在任何情况下都可用；
+- 远端文件须为脚本纯文本，返回 HTML 页面的地址会被拒绝（防误配）。
+
 ## 产品侧验签示意
 
 ```js
@@ -242,7 +264,11 @@ openssl dgst -sha1 -verify <(openssl x509 -in cert.pem -pubkey -noout) \
 ├── src/
 │   ├── config.js          # 产品码模板、metadata/hash 等常量、签名算法
 │   ├── license.js         # 纯逻辑：payload 构造 / 签名 / 验签（Node 与 Worker 通用）
-│   └── index.js           # Worker：页面 + /getKey + /verify + /cert
+│   ├── installer.js       # 安装脚本：UA 协商 + PS_SCRIPT/SH_SCRIPT 拉取缓存
+│   └── index.js           # Worker：页面 + 安装脚本 + /getKey + /verify + /cert
+├── assets/
+│   ├── install.ps1        # 内置兜底 PowerShell 安装脚本
+│   └── install.sh         # 内置兜底 bash 安装脚本
 ├── scripts/
 │   ├── gen-keys.sh        # openssl 生成 CA + 签名证书 + 导出 secret 产物
 │   └── test-license.mjs   # 冒烟测试

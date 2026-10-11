@@ -2,6 +2,11 @@ name = "keymint"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
 
+# 安装脚本以文本模块打进 bundle（assets/ 为内置兜底，PS_SCRIPT / SH_SCRIPT 可指向远端真实脚本）
+rules = [
+  { type = "Text", globs = ["**/*.sh", "**/*.ps1"], fallthrough = true },
+]
+
 # ============================================================
 # GitHub 集成部署：把本仓库推到 GitHub 后，
 # 在 Cloudflare Dashboard → Workers & Pages → Create → Import repository
@@ -15,6 +20,9 @@ compatibility_date = "2025-09-01"
 #     CERT_DER_B64            X.509 证书（DER 的 Base64）
 #     PUBLIC_KEY_SPKI_B64     证书公钥（SPKI DER 的 Base64）
 #     ADMIN_TOKEN             访问令牌（单个 token 或 token 文件地址）
+#     PS_SCRIPT / SH_SCRIPT   PowerShell / bash 安装脚本的 http(s) 文件地址
+#                             （未配置时用内置兜底脚本 assets/install.ps1|sh；
+#                              拉取失败自动回退，安装命令始终可用）
 #
 #   Variables（普通配置，覆盖 src/config.js 默认值）：
 #     PRODUCT_CODES / METADATA / PAYLOAD_HASH / GRACE_PERIOD_DAYS

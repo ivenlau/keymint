@@ -158,6 +158,16 @@ const authCode = await response.text();   // 四段式 key
 
 错误时返回 4xx/5xx，body 为 JSON `{"error": "..."}`。
 
+成功时响应头额外携带**证书签名详情**（十进制大整数，网页「查看签名」弹窗的数据源，
+随签发一同受 `ADMIN_TOKEN` 保护）：
+
+| 响应头 | 内容 |
+|---|---|
+| `X-Cert-Signature` | 签名：证书 CA 签名值（signatureValue） |
+| `X-Cert-Encoded` | 密文：PKCS#1(SHA256(TBS))，CA 公钥还原签名所得的 PKCS#1 编码块 |
+
+跨域读取需带上这两个 `Access-Control-Expose-Headers`（服务端已默认返回）。
+
 ### `POST /verify` — 校验
 
 请求体 JSON `{"key": "..."}`（或直接以纯文本放 key）。
@@ -166,17 +176,6 @@ const authCode = await response.text();   // 四段式 key
 ### `GET /cert` — 签发证书
 
 返回 seg3 证书的 PEM，供你的产品侧内置/信任。
-
-### `GET /cert/signature` — 证书签名详情
-
-返回两个十进制大整数（字符串，页面页脚「/cert 签名」弹窗的数据源）：
-
-```json
-{
-  "signature": "46113912236595…",  // 签名：证书 CA 签名值（signatureValue）
-  "encoded": "31872219281407…"     // 密文：PKCS#1(SHA256(TBS))，CA 公钥还原签名所得的 PKCS#1 编码块
-}
-```
 
 ## 产品侧验签示意
 

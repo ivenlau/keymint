@@ -3,10 +3,12 @@
  *
  * 路由：
  *   GET  /        签发网页
- *   POST /getKey  签发 key（create_key.md 契约：JSON 入参，纯文本返回）
+ *   POST /getKey  签发 key（create_key.md 契约：JSON 入参，纯文本返回）。
+ *                 响应头附带证书签名详情（受 ADMIN_TOKEN 保护）：
+ *                   X-Cert-Signature  证书 CA 签名值（十进制）
+ *                   X-Cert-Encoded    PKCS#1(SHA256(TBS)) 编码块（十进制）
  *   POST /verify  校验 key（JSON 或纯文本入参，JSON 返回）
  *   GET  /cert    返回签发证书 PEM
- *   GET  /cert/signature  证书签名详情：CA 签名值 + PKCS#1(SHA256(TBS))（十进制）
  *
  * Secrets（wrangler secret put 或本地 .dev.vars）：
  *   SIGNING_KEY_PKCS8_B64   签名私钥（PKCS#8 DER 的 Base64）
@@ -34,6 +36,7 @@ function corsHeaders(env) {
     'Access-Control-Allow-Origin': env.CORS_ORIGIN || '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
+    'Access-Control-Expose-Headers': 'X-Cert-Signature, X-Cert-Encoded',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -129,8 +132,13 @@ async function handleGetKey(request, env) {
     cfg,
   );
 
-  // create_key.md 契约：const authCode = await response.text();
-  return text(key, 200, env);
+  // create_key.md 契约：const authCode = await response.text()。
+  // 证书签名详情（十进制）随响应头返回，页面「查看签名」弹窗使用，随签发一同受 ADMIN_TOKEN 保护
+  const sig = await certSignatureInfo(env.CERT_DER_B64);
+  const extra = sig.error
+    ? {}
+    : { 'X-Cert-Signature': sig.signature, 'X-Cert-Encoded': sig.encoded };
+  return text(key, 200, env, { ...TEXT_HEADERS, ...extra });
 }
 
 async function handleVerify(request, env) {
@@ -160,14 +168,6 @@ async function handleVerify(request, env) {
 function handleCert(env) {
   if (!env.CERT_DER_B64) return text('未配置 CERT_DER_B64', 500, env);
   return text(derToPem(env.CERT_DER_B64, 'CERTIFICATE'), 200, env);
-}
-
-async function handleCertSignature(env) {
-  if (!env.CERT_DER_B64) return json({ error: '服务端未配置 CERT_DER_B64' }, 500, env);
-  const info = await certSignatureInfo(env.CERT_DER_B64);
-  if (info.error) return json({ error: info.error }, 500, env);
-  // 签名：证书 CA 签名值；密文：PKCS#1(SHA256(TBS))。均为十进制大整数字符串
-  return json(info, 200, env);
 }
 
 /* 浏览器标签页图标：报头印章的 favicon 版（描边加粗，16px 下依然清晰） */
@@ -231,9 +231,6 @@ export default {
       if (url.pathname === '/getKey' && request.method === 'POST') return handleGetKey(request, env);
       if (url.pathname === '/verify' && request.method === 'POST') return handleVerify(request, env);
       if (url.pathname === '/cert' && request.method === 'GET') return handleCert(env);
-      if (url.pathname === '/cert/signature' && request.method === 'GET') {
-        return handleCertSignature(env);
-      }
       return json({ error: 'not found' }, 404, env);
     } catch (err) {
       return json({ error: String((err && err.message) || err) }, 500, env);
@@ -272,6 +269,7 @@ const HTML_PAGE = `<!doctype html>
   --display: "Syne", "Noto Sans SC", sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; } /* 防止组件 display 规则覆盖 hidden 属性 */
 html { background: var(--bg); }
 body {
   font-family: var(--mono);
@@ -316,11 +314,24 @@ h1 {
   font-size: clamp(36px, 5.4vw, 62px); line-height: 1.02; letter-spacing: -0.01em;
 }
 h1 em { font-style: normal; color: var(--amber); }
-.mast-meta {
+/* ---------- 签发步骤指示 ---------- */
+.mast-steps {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-  margin-top: 22px; font-size: 11px; letter-spacing: 0.22em; color: var(--muted);
+  margin-top: 24px; font-size: 11px; letter-spacing: 0.2em; color: var(--muted);
 }
-.mast-meta .dot { color: var(--amber); font-size: 8px; }
+.step {
+  display: inline-flex; align-items: center; gap: 9px;
+  color: var(--faint); transition: color 0.3s;
+}
+.step-num {
+  font-size: 10px; letter-spacing: 0.12em; color: var(--faint);
+  border: 1px solid var(--line); padding: 3px 7px;
+  transition: color 0.3s, border-color 0.3s;
+}
+.step-arrow { color: var(--faint); font-size: 10px; transition: color 0.3s; }
+.step.done { color: var(--ink); }
+.step.done .step-num { color: var(--amber); border-color: rgba(227, 164, 75, 0.55); }
+.step.done + .step-arrow { color: var(--amber); }
 .seal { width: 108px; height: 108px; flex: none; }
 .seal .ring { transform-origin: 60px 60px; animation: spin 48s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -502,6 +513,7 @@ input[type="date"] { color-scheme: dark; }
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
   font-size: 10px; letter-spacing: 0.3em; color: var(--faint);
 }
+.keybox-actions { display: flex; gap: 8px; }
 .keybox {
   height: 190px;
   background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--amber);
@@ -613,12 +625,14 @@ footer a:hover { color: var(--amber); }
         <text x="60" y="73" text-anchor="middle" fill="rgba(240,231,212,0.75)" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="2">4096</text>
       </svg>
     </div>
-    <div class="mast-meta">
-      <span>四段式 KEY</span><span class="dot">◆</span>
-      <span>RSA-4096</span><span class="dot">◆</span>
-      <span id="mast-alg">RSA-SHA1</span><span class="dot">◆</span>
-      <span>X.509</span><span class="dot">◆</span>
-      <span>SERVICE-SIDE MINT</span>
+    <div class="mast-steps" id="mast-steps">
+      <span class="step done" data-step="1"><span class="step-num">01</span>安装命令</span>
+      <span class="step-arrow">→</span>
+      <span class="step" data-step="2"><span class="step-num">02</span>签发 KEY</span>
+      <span class="step-arrow">→</span>
+      <span class="step" data-step="3"><span class="step-num">03</span>复制 KEY</span>
+      <span class="step-arrow">→</span>
+      <span class="step" data-step="4"><span class="step-num">04</span>使用 KEY</span>
     </div>
   </header>
 
@@ -699,7 +713,10 @@ footer a:hover { color: var(--amber); }
       <div class="keybox-wrap">
         <div class="keybox-head">
           <span>ISSUED KEY</span>
-          <button type="button" class="btn-ghost" id="copy-btn" disabled>复制完整 KEY</button>
+          <div class="keybox-actions">
+            <button type="button" class="btn-ghost" id="view-sig-btn" disabled>查看签名</button>
+            <button type="button" class="btn-ghost" id="copy-btn" disabled>复制完整 KEY</button>
+          </div>
         </div>
         <pre class="keybox empty" id="key-output">等待签发…</pre>
       </div>
@@ -717,8 +734,7 @@ footer a:hover { color: var(--amber); }
   </main>
 
   <footer>
-    <span>KEY MINT · <a href="/cert/signature" id="cert-sig-link">/cert 签名</a></span>
-    <span id="foot-note">步骤：命令安装 · 签发KEY · 复制KEY · 使用KEY</span>
+    <span>© <span id="foot-year">2026</span> __UI_TITLE__ · KEY MINT · 签发台</span>
   </footer>
 
 </div>
@@ -729,11 +745,11 @@ footer a:hover { color: var(--amber); }
     <div class="modal-head">
       <div>
         <span class="idx">CERT / 05</span>
-        <h2 id="cert-modal-title">/cert 签名</h2>
+        <h2 id="cert-modal-title">证书签名详情</h2>
       </div>
       <button type="button" class="modal-close" data-close aria-label="关闭">×</button>
     </div>
-    <p class="modal-sub">来源：seg3 证书 · RSA 公钥还原签名值即得密文（PKCS#1 编码块）</p>
+    <p class="modal-sub">来源：本次签发响应 · RSA 公钥还原签名值即得密文（PKCS#1 编码块）</p>
 
     <div class="modal-scroll">
     <div class="field sig-block">
@@ -773,12 +789,22 @@ footer a:hover { color: var(--amber); }
   var verifyInput = document.getElementById("verify-input");
   var verifyBtn = document.getElementById("verify-btn");
   var verifyStatus = document.getElementById("verify-status");
+  var viewSigBtn = document.getElementById("view-sig-btn");
   var lastKey = "";
 
   if (SPEC) {
-    document.getElementById("mast-alg").textContent = "RSA-" + SPEC.signHash;
     if (SPEC.authRequired) document.getElementById("token-field").hidden = false;
   }
+
+  /* ---- 签发步骤指示：随操作点亮 ---- */
+  function markStep(n) {
+    var steps = document.querySelectorAll("#mast-steps .step");
+    for (var k = 0; k < steps.length; k++) {
+      if (steps[k].getAttribute("data-step") === String(n)) steps[k].classList.add("done");
+    }
+  }
+  markStep(1); // 安装命令已在页面顶部展示
+  document.getElementById("foot-year").textContent = String(new Date().getFullYear());
 
   /* ---- 顶部命令行：默认显示当前系统，可手动切换 ---- */
   var CMD_BY_OS = {
@@ -981,7 +1007,10 @@ footer a:hover { color: var(--amber); }
   }
 
   copyBtn.addEventListener("click", function () {
-    if (lastKey) copyText(lastKey, copyBtn, "复制完整 KEY");
+    if (lastKey) {
+      copyText(lastKey, copyBtn, "复制完整 KEY");
+      markStep(3);
+    }
   });
 
   form.addEventListener("submit", function (e) {
@@ -1010,12 +1039,19 @@ footer a:hover { color: var(--amber); }
       .then(function (res) {
         return res.text().then(function (t) {
           if (!res.ok) throw new Error(t || ("HTTP " + res.status));
-          return t;
+          return {
+            key: t,
+            sig: res.headers.get("X-Cert-Signature"),
+            enc: res.headers.get("X-Cert-Encoded")
+          };
         });
       })
-      .then(function (key) {
-        renderKey(key);
-        verifyInput.value = key;
+      .then(function (r) {
+        renderKey(r.key);
+        verifyInput.value = r.key;
+        certData = (r.sig && r.enc) ? { signature: r.sig, encoded: r.enc } : null;
+        viewSigBtn.disabled = !certData;
+        markStep(2);
         setStatus(statusEl, "签发成功 · " + payload.licenseeName + " → " + payload.expiryDate, "ok");
       })
       .catch(function (err) {
@@ -1048,12 +1084,12 @@ footer a:hover { color: var(--amber); }
       .then(function () { verifyBtn.disabled = false; });
   });
 
-  /* ---- /cert 签名弹窗 ---- */
+  /* ---- 证书签名弹窗（数据来自签发响应头，随签发受 ADMIN_TOKEN 保护） ---- */
   var certModal = document.getElementById("cert-modal");
   var certStatus = document.getElementById("cert-status");
   var certSigBox = document.getElementById("sig-value");
   var certEncBox = document.getElementById("enc-value");
-  var certLoaded = false;
+  var certData = null;
 
   function setCertBoxes(sig, enc, failed) {
     certSigBox.textContent = sig;
@@ -1062,38 +1098,23 @@ footer a:hover { color: var(--amber); }
     certEncBox.classList.toggle("empty", !!failed);
   }
 
-  function loadCertSignature() {
-    setStatus(certStatus, "加载中…", "");
-    fetch("/cert/signature")
-      .then(function (res) {
-        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
-      })
-      .then(function (r) {
-        if (!r.ok || r.data.error) throw new Error(r.data.error || "HTTP " + r.status);
-        setCertBoxes(r.data.signature, r.data.encoded, false);
-        certLoaded = true;
-        setStatus(certStatus, "已从 /cert 证书提取 · RSA-4096 · PKCS#1 v1.5 / SHA-256", "ok");
-      })
-      .catch(function (err) {
-        setCertBoxes("加载失败", "加载失败", true);
-        setStatus(certStatus, "加载失败：" + err.message, "err");
-      });
-  }
-
   function openCertModal() {
+    if (certData) {
+      setCertBoxes(certData.signature, certData.encoded, false);
+      setStatus(certStatus, "来自本次签发 · RSA-4096 · PKCS#1 v1.5 / SHA-256", "ok");
+    } else {
+      setCertBoxes("—", "—", true);
+      setStatus(certStatus, "暂无数据：签发 KEY 后即可查看证书签名", "err");
+    }
     certModal.hidden = false;
     document.body.style.overflow = "hidden";
-    if (!certLoaded) loadCertSignature();
   }
   function closeCertModal() {
     certModal.hidden = true;
     document.body.style.overflow = "";
   }
 
-  document.getElementById("cert-sig-link").addEventListener("click", function (e) {
-    e.preventDefault();
-    openCertModal();
-  });
+  viewSigBtn.addEventListener("click", openCertModal);
   certModal.addEventListener("click", function (e) {
     if (e.target && e.target.getAttribute && e.target.getAttribute("data-close") !== null) {
       closeCertModal();

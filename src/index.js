@@ -685,6 +685,9 @@ footer {
 }
 footer a { color: var(--muted); text-decoration: none; border-bottom: 1px dashed var(--line-2); }
 footer a:hover { color: var(--amber); }
+footer .foot-brand { color: var(--amber); font-style: normal; }
+footer .foot-sep { color: var(--faint); }
+footer .foot-note { color: var(--red); font-style: normal; }
 
 /* ---------- 入场动画 ---------- */
 .reveal { opacity: 0; transform: translateY(16px); animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
@@ -871,7 +874,7 @@ footer a:hover { color: var(--amber); }
   </main>
 
   <footer>
-    <span>© <span id="foot-year">2026</span> __UI_TITLE__ · KEY MINT · 签发台</span>
+    <span><em class="foot-brand">© <span id="foot-year">2026</span> __UI_TITLE__</em><span class="foot-sep"> · </span><em class="foot-note">技术学习使用</em><span class="foot-sep"> · </span><em class="foot-note">禁止非法用途</em></span>
   </footer>
 
 </div>
